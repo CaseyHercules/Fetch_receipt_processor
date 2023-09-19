@@ -1,6 +1,8 @@
 package main
 
 import (
+	"math"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -99,8 +101,6 @@ func setupRoutes(app *fiber.App) {
 		for id := range receipts {
 			receipt_ids = append(receipt_ids, id, strings.Join(calculateBreakdown(receipts[id]), "\n"), "\n")
 		}
-		//sort the receipt ids alphabetically for easier reading
-
 		return c.SendString(strings.Join(receipt_ids, "\n"))
 
 	})
@@ -118,7 +118,8 @@ func calculatePoints(receipt Receipt) int {
 	// Rule 6: 6 points if the day in the purchase date is odd.
 	// Rule 7: 10 points if the time of purchase is after 2:00pm and before 4:00pm.
 	var pts int = 0
-	pts += len(receipt.Retailer)
+	rx := regexp.MustCompile("[^\\w]+")
+	pts += len(rx.ReplaceAllString(receipt.Retailer, ""))
 	if receipt.Total == float64(int(receipt.Total)) {
 		pts += 50
 	}
@@ -128,7 +129,7 @@ func calculatePoints(receipt Receipt) int {
 	pts += (len(receipt.Items) / 2) * 5
 	for _, item := range receipt.Items {
 		if len(strings.TrimSpace(item.ShortDescription))%3 == 0 {
-			pts += int(item.Price*0.2 + 0.5)
+			pts += int(math.Ceil(item.Price * 0.2))
 		}
 	}
 	if receipt.PurchaseDate[len(receipt.PurchaseDate)-1]%2 == 1 {
@@ -151,8 +152,9 @@ func calculateBreakdown(receipt Receipt) []string {
 	// Rule 6: 6 points if the day in the purchase date is odd.
 	// Rule 7: 10 points if the time of purchase is after 2:00pm and before 4:00pm.
 	var breakdown []string
-	rule1_pts := len(strings.Replace(receipt.Retailer, "[a-zA-Z0-9]", "", -1))
-	breakdown = append(breakdown, strconv.Itoa(rule1_pts)+" points - retailer name has "+strconv.Itoa(len(receipt.Retailer))+" alphanumeric characters")
+	rx := regexp.MustCompile("[^\\w]+")
+	rule1_pts := len(rx.ReplaceAllString(receipt.Retailer, ""))
+	breakdown = append(breakdown, strconv.Itoa(rule1_pts)+" points - retailer name has "+strconv.Itoa(len(rx.ReplaceAllString(receipt.Retailer, "")))+" alphanumeric characters")
 	rule2_pts := 0
 	if receipt.Total == float64(int(receipt.Total)) {
 		rule2_pts = 50
@@ -164,14 +166,12 @@ func calculateBreakdown(receipt Receipt) []string {
 	}
 	breakdown = append(breakdown, strconv.Itoa(rule3_pts)+" points - total is a multiple of 0.25")
 	rule4_pts := (len(receipt.Items) / 2) * 5
-	breakdown = append(breakdown, strconv.Itoa(rule4_pts)+" points - 5 points for every two items on the receipt")
-	rule5_pts := 0
+	breakdown = append(breakdown, strconv.Itoa(rule4_pts)+" points - "+strconv.Itoa(len(receipt.Items))+" items ("+strconv.Itoa(len(receipt.Items)/2)+" pairs @ 5 points per pair)")
 	for _, item := range receipt.Items {
 		rule5_pts_temp := 0
 		if len(strings.TrimSpace(item.ShortDescription))%3 == 0 {
-			rule5_pts_temp = int(item.Price*0.2 + 0.5)
-			rule5_pts += int(item.Price*0.2 + 0.5)
-			breakdown = append(breakdown, strconv.Itoa(rule5_pts_temp)+" points - trimmed length of the item description is a multiple of 3")
+			rule5_pts_temp = int(math.Ceil(item.Price * 0.2))
+			breakdown = append(breakdown, strconv.Itoa(rule5_pts_temp)+" points - \""+strings.TrimSpace(item.ShortDescription)+"\" has "+strconv.Itoa(len(strings.TrimSpace(item.ShortDescription)))+" characters and is a multiple of 3")
 		}
 	}
 	rule6_pts := 0
@@ -185,6 +185,5 @@ func calculateBreakdown(receipt Receipt) []string {
 	}
 	breakdown = append(breakdown, strconv.Itoa(rule7_pts)+" points - time of purchase is after 2:00pm and before 4:00pm")
 	breakdown = append(breakdown, strconv.Itoa(calculatePoints(receipt))+" points - total points")
-	breakdown = append(breakdown, strconv.Itoa(rule1_pts+rule2_pts+rule3_pts+rule4_pts+rule5_pts+rule6_pts+rule7_pts)+" points - total points from breakdown logic")
 	return breakdown
 }
