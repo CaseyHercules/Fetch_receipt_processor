@@ -51,12 +51,12 @@ func setupRoutes(app *fiber.App) {
 		// Parse the JSON payload from the request
 		receipt := new(Receipt)
 		if err := c.BodyParser(receipt); err != nil {
-			return err
+			return c.JSON(fiber.Map{"Processing JSON error": err.Error()})
 		}
 		// Validate the receipt
 		validation := validate(*receipt)
 		if len(validation) > 0 {
-			return c.JSON(fiber.Map{"error": validation})
+			return c.JSON(fiber.Map{"formating error": validation})
 		}
 
 		// Generate a unique ID for the receipt
@@ -205,38 +205,69 @@ func validate(receipt Receipt) []string {
 	var output []string
 	// Validate the receipt
 
-	// Validate all items have a price and short description AND
-	// Validate total matches sum of items
-	var temp_total float64 = 0
-	for _, item := range receipt.Items {
-		if item.Price == 0 {
-			output = append(output, "Item is missing or has an invalid price")
-		}
-		if len(item.ShortDescription) == 0 {
-			output = append(output, "Item is missing or has an invalid short description")
-		}
-		temp_total += item.Price
-	}
-	if temp_total != receipt.Total {
-		output = append(output, "Total does not match sum of items. Total from items: "+
-			strconv.FormatFloat(temp_total, 'f', 2, 64)+
-			"   Total from receipt: "+
-			strconv.FormatFloat(receipt.Total, 'f', 2, 64))
+	//run validation functions and store results in map
+	v := validateItemsNTotal(receipt)
+	// Validate all items have a price
+	if v["price"] == 0 {
+		output = append(output, "Item is missing or has an invalid price")
 	}
 
-	// Validate PurchaseDate is a valid date
-	_, date_err := time.Parse("2006-01-02", receipt.PurchaseDate)
-	if date_err != nil {
-		output = append(output, "Date is a invalid date. Please use the format YYYY-MM-DD")
+	// Validate all items have a short description
+	if v["shortDescription"] == 0 {
+		output = append(output, "Item is missing or has an invalid short description")
 	}
-	//validate PurchaseTime is a valid time
-	_, time_err := time.Parse("15:04", receipt.PurchaseTime)
-	if time_err != nil {
-		output = append(output, "Time is a invalid time Please use the format HH:MM")
+
+	// Validate total matches sum of items
+	if float64(v["total_from_items"])/100 != receipt.Total {
+		output = append(output, "Total does not match sum of items. Total from items: "+
+			strconv.FormatFloat(float64(v["total_from_items"])/100, 'f', 2, 64)+
+			"   		Total from receipt: "+strconv.FormatFloat(receipt.Total, 'f', 2, 64))
 	}
-	//validate Retailer is not empty after removing non-alphanumeric characters
-	if len(rx.ReplaceAllString(receipt.Retailer, "")) < 1 {
+
+	if !validatePurchaseDate(receipt) {
+		output = append(output, "PurchaseDate is a invalid date. Please use the format YYYY-MM-DD")
+	}
+
+	if !validatePurchaseTime(receipt) {
+		output = append(output, "PurchaseTime is a invalid time Please use the format HH:MM")
+	}
+
+	if !validateRetailer(receipt) {
 		output = append(output, "Retailer is empty")
 	}
 	return output
+}
+
+func validateItemsNTotal(receipt Receipt) map[string]int {
+	returnHash := map[string]int{"price": 1, "shortDescription": 1, "total_from_items": 0}
+	// Validate all items have a price and short description
+	var temp_total float64 = 0
+	for _, item := range receipt.Items {
+		if item.Price == 0 {
+			returnHash["price"] = 0
+		}
+		if len(item.ShortDescription) == 0 {
+			returnHash["shortDescription"] = 0
+		}
+		temp_total += item.Price
+	}
+	returnHash["total_from_items"] = int(math.Round(100 * temp_total))
+	return returnHash
+}
+
+func validatePurchaseDate(receipt Receipt) bool {
+	// Validate PurchaseDate is a valid date
+	_, err := time.Parse("2006-01-02", receipt.PurchaseDate)
+	return err == nil
+}
+
+func validatePurchaseTime(receipt Receipt) bool {
+	//validate PurchaseTime is a valid time
+	_, err := time.Parse("15:04", receipt.PurchaseTime)
+	return err == nil
+}
+
+func validateRetailer(receipt Receipt) bool {
+	//validate Retailer is not empty after removing non-alphanumeric characters
+	return len(rx.ReplaceAllString(receipt.Retailer, "")) >= 1
 }
