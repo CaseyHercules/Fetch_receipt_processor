@@ -96,16 +96,13 @@ func TestValidateRule4(t *testing.T) {
 func TestValidateRule5(t *testing.T) {
 	filetitles := []string{"ex1", "ex2", "ex3", "ex4"}
 	expected_pts := []int{1, 0, 6, 26}
-	expected_count := []int{1, 0, 2, 2}
+	expected_count := []int{1, 0, 3, 2}
 	receipts := getTestReceipts(filetitles, t)
 	for i, receipt := range receipts {
 		pts := 0
-		count := 0
+		count := len(calculatePointsRule5(receipt))
 		for _, item := range calculatePointsRule5(receipt) {
 			pts += item.Points
-			if item.Points > 0 {
-				count++
-			}
 		}
 		if pts != expected_pts[i] {
 			t.Errorf("calculatePointsRule5(%v) Count of points = %v; want %v", filetitles[i], pts, expected_pts[i])

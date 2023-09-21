@@ -249,8 +249,8 @@ func calculatePointsRule5(receipt Receipt) []ProcessedEntry {
 			}
 			r.Points = temp
 			r.Breakdown = fmt.Sprintf("%v points - \"%v\" has %v characters and is a multiple of 3", r.Points, strings.TrimSpace(item.ShortDescription), len(strings.TrimSpace(item.ShortDescription)))
+			output = append(output, *r)
 		}
-		output = append(output, *r)
 	}
 	return output
 }
