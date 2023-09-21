@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -31,6 +32,8 @@ type Breakdown struct {
 	Breakdown int `json:"breakdown"`
 }
 
+var rx = regexp.MustCompile("[^\\w]+")
+
 func setupRoutes(app *fiber.App) {
 
 	var receipts = make(map[string]Receipt)
@@ -49,6 +52,11 @@ func setupRoutes(app *fiber.App) {
 		receipt := new(Receipt)
 		if err := c.BodyParser(receipt); err != nil {
 			return err
+		}
+		// Validate the receipt
+		validation := validate(*receipt)
+		if len(validation) > 0 {
+			return c.JSON(fiber.Map{"error": validation})
 		}
 
 		// Generate a unique ID for the receipt
@@ -85,7 +93,7 @@ func setupRoutes(app *fiber.App) {
 		if !ok {
 			return fiber.NewError(fiber.StatusNotFound, "Receipt not found")
 		}
-		breakdown := calculateBreakdown(receipt)
+		breakdown := calculateBreakdown(receipt, true)
 
 		// Return the points as a JSON response
 		return c.JSON(fiber.Map{"breakdown": breakdown})
@@ -99,7 +107,7 @@ func setupRoutes(app *fiber.App) {
 		}
 		var receipt_ids []string
 		for id := range receipts {
-			receipt_ids = append(receipt_ids, id, strings.Join(calculateBreakdown(receipts[id]), "\n"), "\n")
+			receipt_ids = append(receipt_ids, id, strings.Join(calculateBreakdown(receipts[id], true), "\n"), "\n")
 		}
 		return c.SendString(strings.Join(receipt_ids, "\n"))
 
@@ -118,7 +126,6 @@ func calculatePoints(receipt Receipt) int {
 	// Rule 6: 6 points if the day in the purchase date is odd.
 	// Rule 7: 10 points if the time of purchase is after 2:00pm and before 4:00pm.
 	var pts int = 0
-	rx := regexp.MustCompile("[^\\w]+")
 	pts += len(rx.ReplaceAllString(receipt.Retailer, ""))
 	if receipt.Total == float64(int(receipt.Total)) {
 		pts += 50
@@ -129,7 +136,12 @@ func calculatePoints(receipt Receipt) int {
 	pts += (len(receipt.Items) / 2) * 5
 	for _, item := range receipt.Items {
 		if len(strings.TrimSpace(item.ShortDescription))%3 == 0 {
-			pts += int(math.Ceil(item.Price * 0.2))
+			//if value is negative, set to 0
+			temp := int(math.Ceil(item.Price * 0.2))
+			if temp < 0 {
+				temp = 0
+			}
+			pts += temp
 		}
 	}
 	if receipt.PurchaseDate[len(receipt.PurchaseDate)-1]%2 == 1 {
@@ -140,7 +152,7 @@ func calculatePoints(receipt Receipt) int {
 	}
 	return pts
 }
-func calculateBreakdown(receipt Receipt) []string {
+func calculateBreakdown(receipt Receipt, view_breakdown bool) []string {
 	// Function to define the breakdown of points
 	// Rule 1: One point for every alphanumeric character in the retailer name.
 	// Rule 2: 50 points if the total is a round dollar amount with no cents.
@@ -152,7 +164,6 @@ func calculateBreakdown(receipt Receipt) []string {
 	// Rule 6: 6 points if the day in the purchase date is odd.
 	// Rule 7: 10 points if the time of purchase is after 2:00pm and before 4:00pm.
 	var breakdown []string
-	rx := regexp.MustCompile("[^\\w]+")
 	rule1_pts := len(rx.ReplaceAllString(receipt.Retailer, ""))
 	breakdown = append(breakdown, strconv.Itoa(rule1_pts)+" points - retailer name has "+strconv.Itoa(len(rx.ReplaceAllString(receipt.Retailer, "")))+" alphanumeric characters")
 	rule2_pts := 0
@@ -171,6 +182,9 @@ func calculateBreakdown(receipt Receipt) []string {
 		rule5_pts_temp := 0
 		if len(strings.TrimSpace(item.ShortDescription))%3 == 0 {
 			rule5_pts_temp = int(math.Ceil(item.Price * 0.2))
+			if rule5_pts_temp < 0 {
+				rule5_pts_temp = 0
+			}
 			breakdown = append(breakdown, strconv.Itoa(rule5_pts_temp)+" points - \""+strings.TrimSpace(item.ShortDescription)+"\" has "+strconv.Itoa(len(strings.TrimSpace(item.ShortDescription)))+" characters and is a multiple of 3")
 		}
 	}
@@ -186,4 +200,43 @@ func calculateBreakdown(receipt Receipt) []string {
 	breakdown = append(breakdown, strconv.Itoa(rule7_pts)+" points - time of purchase is after 2:00pm and before 4:00pm")
 	breakdown = append(breakdown, strconv.Itoa(calculatePoints(receipt))+" points - total points")
 	return breakdown
+}
+func validate(receipt Receipt) []string {
+	var output []string
+	// Validate the receipt
+
+	// Validate all items have a price and short description AND
+	// Validate total matches sum of items
+	var temp_total float64 = 0
+	for _, item := range receipt.Items {
+		if item.Price == 0 {
+			output = append(output, "Item is missing or has an invalid price")
+		}
+		if len(item.ShortDescription) == 0 {
+			output = append(output, "Item is missing or has an invalid short description")
+		}
+		temp_total += item.Price
+	}
+	if temp_total != receipt.Total {
+		output = append(output, "Total does not match sum of items. Total from items: "+
+			strconv.FormatFloat(temp_total, 'f', 2, 64)+
+			"   Total from receipt: "+
+			strconv.FormatFloat(receipt.Total, 'f', 2, 64))
+	}
+
+	// Validate PurchaseDate is a valid date
+	_, date_err := time.Parse("2006-01-02", receipt.PurchaseDate)
+	if date_err != nil {
+		output = append(output, "Date is a invalid date. Please use the format YYYY-MM-DD")
+	}
+	//validate PurchaseTime is a valid time
+	_, time_err := time.Parse("15:04", receipt.PurchaseTime)
+	if time_err != nil {
+		output = append(output, "Time is a invalid time Please use the format HH:MM")
+	}
+	//validate Retailer is not empty after removing non-alphanumeric characters
+	if len(rx.ReplaceAllString(receipt.Retailer, "")) < 1 {
+		output = append(output, "Retailer is empty")
+	}
+	return output
 }
