@@ -38,7 +38,7 @@ type ProcessedEntry struct {
 	Breakdown string `json:"breakdown"`
 }
 
-var rx = regexp.MustCompile("[^\\w]+")
+var rx = regexp.MustCompile("[^a-zA-Z0-9]+")
 
 func setupRoutes(app *fiber.App) {
 
@@ -47,9 +47,9 @@ func setupRoutes(app *fiber.App) {
 		return c.SendString("Welcome to the Fetch_receipt_processor_challenge_API! \n\n" +
 			"Please use the following endpoints to interact with the API: \n\n" +
 			"POST /receipts/process \n" +
-			"GET /receipts/:id/points specific Receipt's point total via the rule set\n" +
-			"GET /receipts/:id/breakdown For a breakdown of a specific Receipt via returned Receipt UUID\n" +
-			"GET /debug for a rough breakdown of recent processed receipts \n\n" +
+			"GET  /receipts/:id/points specific Receipt's point total via the rule set\n" +
+			"GET  /receipts/:id/breakdown For a breakdown of a specific Receipt via returned Receipt UUID\n" +
+			"GET  /debug for a human readable breakdown of recent processed receipts \n\n" +
 			"Please see the README.md file for more information.")
 	})
 	// Endpoint for processing receipts
@@ -201,7 +201,7 @@ func calculatePointsRule1(receipt Receipt) ProcessedEntry {
 	// Rule 1: One point for every alphanumeric character in the retailer name.
 	r := new(ProcessedEntry)
 	r.Points = len(rx.ReplaceAllString(receipt.Retailer, ""))
-	r.Breakdown = fmt.Sprintf("%v points - retailer name has %v alphanumeric characters%v%v", r.Points, r.Points, r.Points, r.Points)
+	r.Breakdown = fmt.Sprintf("%v points - retailer: \"%v\" has %v alphanumeric characters", r.Points, rx.ReplaceAllString(receipt.Retailer, ""), r.Points)
 	return *r
 }
 func calculatePointsRule2(receipt Receipt) ProcessedEntry {

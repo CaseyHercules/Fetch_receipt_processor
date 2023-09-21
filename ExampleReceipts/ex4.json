@@ -1,7 +1,7 @@
 {
     "retailer": "Target",
-    "purchaseDate": "2022-01-01",
-    "purchaseTime": "13:01",
+    "purchaseDate": "2022-01-02",
+    "purchaseTime": "15:01",
     "items": [
       {
         "shortDescription": "Mountain Dew 12PK",
@@ -17,8 +17,8 @@
         "price": "3.35"
       },{
         "shortDescription": "   Klarbrunn 12-PK 12 FL OZ  ",
-        "price": "12.00"
+        "price": "112.00"
       }
     ],
-    "total": "35.35"
+    "total": "135.35"
   }
